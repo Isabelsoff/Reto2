@@ -1,0 +1,51 @@
+# =========================================================================
+# Android Studio & Gradle .gitignore
+# =========================================================================
+
+# Archivos de compilación y artefactos generados
+/build/
+/*/build/
+bin/
+gen/
+out/
+*.apk
+*.aab
+*.aar
+*.ap_
+*.dex
+*.class
+.artifacts/
+
+# Archivos temporales y de caché de Gradle
+.gradle/
+build/
+
+# Configuración local del desarrollador (SDK, variables locales)
+local.properties
+key.properties
+
+# Firmas y Llaves del proyecto (Keystores)
+*.jks
+*.keystore
+*.pepk
+
+# Archivos de IDE (Android Studio / IntelliJ)
+.idea/
+*.iml
+.navigation/
+
+# Archivos C++ / NDK
+.externalNativeBuild/
+.cxx/
+
+# Capturas de pantalla, perfiles y logs
+/captures/
+*.log
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Kotlin
+.kotlin/

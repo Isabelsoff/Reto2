@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.Reto2" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#2B2E33</item>
+        <item name="android:statusBarColor">#2B2E33</item>
+        <item name="android:navigationBarColor">#2B2E33</item>
+    </style>
+</resources>
