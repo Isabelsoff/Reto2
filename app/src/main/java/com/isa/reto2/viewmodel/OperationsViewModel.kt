@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+
 val CURRENCIES = listOf("COP", "EUR", "GBP", "JPY")
 
 data class OpsUiState(
@@ -36,7 +37,8 @@ data class OpsUiState(
     val amount: String = "",
     val photoBitmap: Bitmap? = null,
     val error: String? = null,
-    val message: String? = null
+    val message: String? = null,
+    val auditAlert: Boolean = false
 )
 
 class OperationsViewModel(app: Application) : AndroidViewModel(app) {
@@ -79,6 +81,10 @@ class OperationsViewModel(app: Application) : AndroidViewModel(app) {
     fun removePhoto() {
         vibrationHelper.vibrateClick()
         _state.update { it.copy(photoBitmap = null) }
+    }
+
+    fun dismissAuditAlert() {
+        _state.update { it.copy(auditAlert = false) }
     }
 
     /** Ignora respuestas tardías: solo aplica la de la última solicitud. */
@@ -137,12 +143,12 @@ class OperationsViewModel(app: Application) : AndroidViewModel(app) {
 
             txRepo.execute(uid, s.currency, amount, rate, type, photoPath)
                 .onSuccess { tx ->
-                    val extra = if (tx.requiresAudit) " (marcada para auditoría)" else ""
-
-                    if (type == TYPE_BUY && amount > 200.0) {
-                        val timings = longArrayOf(0, 300, 100, 500, 100, 300)
-                        val amplitudes = intArrayOf(0, 255, 0, 255, 0, 255)
-                        vibrationHelper.vibrateWaveform(timings, amplitudes)
+                    if (tx.requiresAudit) {
+                        // Patrón largo de vibración: más fuerte que el de éxito normal
+                        vibrationHelper.vibrateWaveform(
+                            longArrayOf(0, 300, 100, 500, 100, 300),
+                            intArrayOf(0, 255, 0, 255, 0, 255)
+                        )
                     } else {
                         vibrationHelper.vibrateSuccess()
                     }
@@ -152,7 +158,8 @@ class OperationsViewModel(app: Application) : AndroidViewModel(app) {
                             amount = "",
                             photoBitmap = null,
                             error = null,
-                            message = "$type registrada$extra"
+                            message = if (tx.requiresAudit) null else "$type registrada",
+                            auditAlert = tx.requiresAudit
                         )
                     }
                 }

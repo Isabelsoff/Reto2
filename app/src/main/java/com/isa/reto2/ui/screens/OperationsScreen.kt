@@ -67,6 +67,8 @@ import com.isa.reto2.ui.theme.CardText
 import com.isa.reto2.viewmodel.CURRENCIES
 import com.isa.reto2.viewmodel.OperationsViewModel
 import java.util.Locale
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,6 +101,19 @@ fun OperationsScreen(
         } else {
             Toast.makeText(context, "Permiso de cámara denegado", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    if (state.auditAlert) {
+        AlertDialog(
+            onDismissRequest = vm::dismissAuditAlert,
+            title = { Text("⚠ Requiere auditoría") },
+            text = {
+                Text("La tasa varió más de 2,5 % respecto a tu última operación. La transacción fue registrada y marcada para revisión del administrador.")
+            },
+            confirmButton = {
+                TextButton(onClick = vm::dismissAuditAlert) { Text("Entendido") }
+            }
+        )
     }
 
     Scaffold(
