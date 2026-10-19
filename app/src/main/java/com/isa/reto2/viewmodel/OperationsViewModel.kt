@@ -4,13 +4,13 @@ import android.app.Application
 import android.graphics.Bitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.isa.reto2.RetoApp
+import com.isa.reto2.data.AppUser
+import com.isa.reto2.data.FirestoreTransactionRepository
 import com.isa.reto2.data.RatesRepository
 import com.isa.reto2.data.SessionManager
 import com.isa.reto2.data.TYPE_BUY
-import com.isa.reto2.data.TransactionEntity
+import com.isa.reto2.data.TransactionModel
 import com.isa.reto2.data.TransactionRepository
-import com.isa.reto2.data.UserEntity
 import com.isa.reto2.hardware.VibrationHelper
 import com.isa.reto2.network.ErApiService
 import kotlinx.coroutines.CancellationException
@@ -40,21 +40,21 @@ data class OpsUiState(
 )
 
 class OperationsViewModel(app: Application) : AndroidViewModel(app) {
-    private val db = (app as RetoApp).database
-    private val txRepo = TransactionRepository(db)
+    private val firestoreRepo = FirestoreTransactionRepository()
+    private val txRepo = TransactionRepository(firestoreRepo)
     private val ratesRepo = RatesRepository(ErApiService.instance)
     private val vibrationHelper = VibrationHelper(app)
 
     private val _state = MutableStateFlow(OpsUiState())
     val state: StateFlow<OpsUiState> = _state.asStateFlow()
 
-    private val userId: Long? = SessionManager.currentUser?.id
+    private val userUid: String? get() = SessionManager.currentUser?.uid
 
-    val history: Flow<List<TransactionEntity>> =
-        userId?.let { txRepo.observeByUser(it) } ?: emptyFlow()
+    val history: Flow<List<TransactionModel>> =
+        userUid?.let { txRepo.observeByUser(it) } ?: emptyFlow()
 
     val balance: Flow<Double> =
-        userId?.let { id -> db.userDao().observeById(id).map { u: UserEntity? -> u?.balanceUsd ?: 0.0 } }
+        userUid?.let { uid -> firestoreRepo.observeUser(uid).map { u: AppUser? -> u?.balanceUsd ?: 0.0 } }
             ?: emptyFlow()
 
     private var rateJob: Job? = null
@@ -102,7 +102,11 @@ class OperationsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun execute(type: String) {
-        val uid = userId ?: return
+        val uid = userUid
+        if (uid == null) {
+            _state.update { it.copy(error = "Sesión no válida") }
+            return
+        }
         val s = _state.value
         val amount = s.amount.replace(',', '.').toDoubleOrNull()
         val rate = s.rate
@@ -120,44 +124,42 @@ class OperationsViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         viewModelScope.launch {
-            try {
-                // Si hay una foto cargada, se guarda en disco y se obtiene su ruta
-                val photoPath = s.photoBitmap?.let { bmp ->
-                    withContext(Dispatchers.IO) {
-                        val ctx = getApplication<Application>()
-                        val file = File(ctx.filesDir, "tx_${System.currentTimeMillis()}.jpg")
-                        file.outputStream().use { out ->
-                            bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
-                        }
-                        file.absolutePath
+            val photoPath = s.photoBitmap?.let { bmp ->
+                withContext(Dispatchers.IO) {
+                    val ctx = getApplication<Application>()
+                    val file = File(ctx.filesDir, "tx_${System.currentTimeMillis()}.jpg")
+                    file.outputStream().use { out ->
+                        bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                    }
+                    file.absolutePath
+                }
+            }
+
+            txRepo.execute(uid, s.currency, amount, rate, type, photoPath)
+                .onSuccess { tx ->
+                    val extra = if (tx.requiresAudit) " (marcada para auditoría)" else ""
+
+                    if (type == TYPE_BUY && amount > 200.0) {
+                        val timings = longArrayOf(0, 300, 100, 500, 100, 300)
+                        val amplitudes = intArrayOf(0, 255, 0, 255, 0, 255)
+                        vibrationHelper.vibrateWaveform(timings, amplitudes)
+                    } else {
+                        vibrationHelper.vibrateSuccess()
+                    }
+
+                    _state.update {
+                        it.copy(
+                            amount = "",
+                            photoBitmap = null,
+                            error = null,
+                            message = "$type registrada$extra"
+                        )
                     }
                 }
-
-                val tx = txRepo.execute(uid, s.currency, amount, rate, type, photoPath)
-                val extra = if (tx.requiresAudit) " (marcada para auditoría)" else ""
-
-                // REQUERIMIENTO HÁPTICO:
-                // Si es una COMPRA y el monto es mayor a 200 USD, se activa una vibración intensa/prolongada
-                if (type == TYPE_BUY && amount > 200.0) {
-                    val timings = longArrayOf(0, 300, 100, 500, 100, 300)
-                    val amplitudes = intArrayOf(0, 255, 0, 255, 0, 255)
-                    vibrationHelper.vibrateWaveform(timings, amplitudes)
-                } else {
-                    vibrationHelper.vibrateSuccess()
+                .onFailure { e ->
+                    vibrationHelper.vibrateError()
+                    _state.update { it.copy(error = e.message ?: "Error al registrar", message = null) }
                 }
-
-                _state.update {
-                    it.copy(
-                        amount = "",
-                        photoBitmap = null,
-                        error = null,
-                        message = "$type registrada$extra"
-                    )
-                }
-            } catch (e: IllegalStateException) {
-                vibrationHelper.vibrateError()
-                _state.update { it.copy(error = e.message ?: "Error al registrar", message = null) }
-            }
         }
     }
 }

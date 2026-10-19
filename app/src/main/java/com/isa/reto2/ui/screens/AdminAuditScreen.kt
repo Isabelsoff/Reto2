@@ -55,7 +55,7 @@ fun AdminAuditScreen(onBack: () -> Unit, vm: AdminAuditViewModel = viewModel()) 
                 Text("Acceso restringido a administradores", color = MaterialTheme.colorScheme.error)
             }
         } else {
-            val flagged = rows.count { it.tx.requiresAudit }
+            val flagged = rows.count { it.requiresAudit }
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(16.dp),
@@ -69,8 +69,8 @@ fun AdminAuditScreen(onBack: () -> Unit, vm: AdminAuditViewModel = viewModel()) 
                         fontWeight = FontWeight.Bold
                     )
                 }
-                items(rows, key = { it.tx.id }) { row ->
-                    TransactionCard(row.tx, email = row.email, adminView = true)
+                items(rows, key = { it.id }) { item ->
+                    TransactionCard(item, email = item.email.ifBlank { null }, adminView = true)
                 }
             }
         }

@@ -1,28 +1,45 @@
 package com.isa.reto2.viewmodel
 
 import android.app.Application
-import android.database.sqlite.SQLiteConstraintException
 import android.util.Patterns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.isa.reto2.RetoApp
-import com.isa.reto2.data.ROLE_USER
-import com.isa.reto2.data.Security
-import com.isa.reto2.data.SessionManager
-import com.isa.reto2.data.UserEntity
+import com.isa.reto2.data.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-data class AuthUiState(val loading: Boolean = false, val error: String? = null)
+data class AuthUiState(
+    val loading: Boolean = false,
+    val error: String? = null,
+    val isCheckingSession: Boolean = false
+)
 
 class AuthViewModel(app: Application) : AndroidViewModel(app) {
-    private val userDao = (app as RetoApp).database.userDao()
+    private val authRepo = AuthRepository()
     private val _state = MutableStateFlow(AuthUiState())
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
 
     fun clearError() { _state.value = _state.value.copy(error = null) }
+
+    fun checkActiveSession(onSessionActive: () -> Unit) {
+        if (!authRepo.hasFirebaseUser()) return
+        viewModelScope.launch {
+            _state.value = AuthUiState(isCheckingSession = true, loading = true)
+            try {
+                val user = authRepo.checkAndLoadActiveSession()
+                if (user != null) {
+                    _state.value = AuthUiState()
+                    onSessionActive()
+                } else {
+                    _state.value = AuthUiState()
+                }
+            } catch (e: Exception) {
+                _state.value = AuthUiState()
+            }
+        }
+    }
 
     private fun validate(email: String, password: String, confirm: String? = null): String? = when {
         email.isBlank() || password.isBlank() || (confirm != null && confirm.isBlank()) ->
@@ -37,14 +54,14 @@ class AuthViewModel(app: Application) : AndroidViewModel(app) {
         validate(email, password)?.let { _state.value = AuthUiState(error = it); return }
         viewModelScope.launch {
             _state.value = AuthUiState(loading = true)
-            val user = userDao.getByEmail(email.trim().lowercase())
-            if (user == null || user.password != Security.sha256(password)) {
-                _state.value = AuthUiState(error = "Correo o contraseña incorrectos")
-            } else {
-                SessionManager.currentUser = user
-                _state.value = AuthUiState()
-                onSuccess()
-            }
+            authRepo.login(email, password)
+                .onSuccess {
+                    _state.value = AuthUiState()
+                    onSuccess()
+                }
+                .onFailure { e ->
+                    _state.value = AuthUiState(error = e.message ?: "Correo o contraseña incorrectos")
+                }
         }
     }
 
@@ -52,19 +69,14 @@ class AuthViewModel(app: Application) : AndroidViewModel(app) {
         validate(email, password, confirm)?.let { _state.value = AuthUiState(error = it); return }
         viewModelScope.launch {
             _state.value = AuthUiState(loading = true)
-            try {
-                val user = UserEntity(
-                    email = email.trim().lowercase(),
-                    password = Security.sha256(password),
-                    role = ROLE_USER
-                )
-                val id = userDao.insert(user)
-                SessionManager.currentUser = user.copy(id = id)
-                _state.value = AuthUiState()
-                onSuccess()
-            } catch (e: SQLiteConstraintException) {
-                _state.value = AuthUiState(error = "Ese correo ya está registrado")
-            }
+            authRepo.register(email, password)
+                .onSuccess {
+                    _state.value = AuthUiState()
+                    onSuccess()
+                }
+                .onFailure { e ->
+                    _state.value = AuthUiState(error = e.message ?: "Error al registrar")
+                }
         }
     }
 }

@@ -24,7 +24,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.isa.reto2.data.TransactionEntity
+import com.isa.reto2.data.TransactionModel
 import com.isa.reto2.ui.theme.AuditRed
 import com.isa.reto2.ui.theme.AuditRedBg
 import com.isa.reto2.ui.theme.CardGray
@@ -42,7 +42,7 @@ fun formatDate(ts: Long): String =
 fun money(v: Double): String = String.format(Locale.US, "%,.2f", v)
 
 @Composable
-fun TransactionCard(tx: TransactionEntity, email: String? = null, adminView: Boolean = false) {
+fun TransactionCard(tx: TransactionModel, email: String? = null, adminView: Boolean = false) {
     val flagged = tx.requiresAudit
     val txPhoto by produceState<ImageBitmap?>(initialValue = null, tx.photoPath) {
         val path = tx.photoPath
@@ -71,7 +71,7 @@ fun TransactionCard(tx: TransactionEntity, email: String? = null, adminView: Boo
             }
             if (email != null) Text("Usuario: $email")
             Text("Monto: ${money(tx.amount)} USD")
-            Text("Tasa: ${String.format(Locale.US, "%,.4f", tx.currentExchangeRate)}")
+            Text("Tasa: ${String.format(Locale.US, "%,.4f", tx.exchangeRate)}")
             if (adminView) Text("Desviación: ${String.format(Locale.US, "%.2f", tx.deviationPercent)} %")
             Text(formatDate(tx.timestamp), color = Color(0xFF5F6368))
 

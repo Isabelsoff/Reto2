@@ -32,11 +32,30 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.isa.reto2.viewmodel.AuthViewModel
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.LaunchedEffect
+import com.isa.reto2.data.SessionManager
+
 @Composable
 fun LoginScreen(onLoggedIn: () -> Unit, onGoRegister: () -> Unit, vm: AuthViewModel = viewModel()) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     val state by vm.state.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        if (SessionManager.currentUser != null) {
+            onLoggedIn()
+        } else {
+            vm.checkActiveSession(onLoggedIn)
+        }
+    }
+
+    if (state.isCheckingSession) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
 
     AuthLayout(title = "Iniciar sesión") {
         OutlinedTextField(
